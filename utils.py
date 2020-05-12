@@ -1,4 +1,6 @@
 """Provides some utilities widely used by other modules"""
+#Taken from https://github.com/aimacode/aima-python/blob/master/utils.py
+#Author: Donato Meoli
 
 import bisect
 import collections
