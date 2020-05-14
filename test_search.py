@@ -73,7 +73,7 @@ def test_recursive_best_first_search():
 
 
 def test_simulated_annealing():
-    return simulated_annealing(romania_problem).solution()
+    return simulated_annealing(romania_problem)
 
 
 def line_spacing():
