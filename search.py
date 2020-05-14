@@ -385,15 +385,20 @@ def exp_schedule(k=20, lam=0.005, limit=100):
 def simulated_annealing(problem, schedule=exp_schedule()):
     """[Figure 4.5] CAUTION: This differs from the pseudocode as it
     returns a state instead of a Node."""
+    frontier = PriorityQueue()
     current = Node(problem.initial)
+    frontier.append(current)
     for t in range(sys.maxsize):
+        if problem.goal_test(current.state):
+            return current.solution()
         T = schedule(t)
         if T == 0:
-            return current.state
+            return current.solution()
         neighbors = current.expand(problem)
         if not neighbors:
-            return current.state
+            return frontier
         next_choice = random.choice(neighbors)
+        frontier.append(next_choice)
         # delta_e = problem.value(next_choice.state) - problem.value(current.state)
         # if delta_e > 0 or probability(np.exp(delta_e / T)):
         current = next_choice
@@ -1061,8 +1066,7 @@ class InstrumentedProblem(Problem):
 
 
 def compare_searchers(problems, header,
-                      searchers=[
-                                 astar_search, simulated_annealing_full]):
+                      searchers=[ astar_search, simulated_annealing_full]):
     def do(searcher, problem):
         p = InstrumentedProblem(problem)
         searcher(p)
