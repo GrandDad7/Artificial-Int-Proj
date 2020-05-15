@@ -459,277 +459,6 @@ def and_or_graph_search(problem):
     return or_search(problem.initial, problem, [])
 
 
-# Pre-defined actions for PeakFindingProblem
-directions4 = {'W': (-1, 0), 'N': (0, 1), 'E': (1, 0), 'S': (0, -1)}
-directions8 = dict(directions4)
-directions8.update({'NW': (-1, 1), 'NE': (1, 1), 'SE': (1, -1), 'SW': (-1, -1)})
-
-
-class PeakFindingProblem(Problem):
-    """Problem of finding the highest peak in a limited grid"""
-
-    def __init__(self, initial, grid, defined_actions=directions4):
-        """The grid is a 2 dimensional array/list whose state is specified by tuple of indices"""
-        super().__init__(initial)
-        self.grid = grid
-        self.defined_actions = defined_actions
-        self.n = len(grid)
-        assert self.n > 0
-        self.m = len(grid[0])
-        assert self.m > 0
-
-    def actions(self, state):
-        """Returns the list of actions which are allowed to be taken from the given state"""
-        allowed_actions = []
-        for action in self.defined_actions:
-            next_state = vector_add(state, self.defined_actions[action])
-            if 0 <= next_state[0] <= self.n - 1 and 0 <= next_state[1] <= self.m - 1:
-                allowed_actions.append(action)
-
-        return allowed_actions
-
-    def result(self, state, action):
-        """Moves in the direction specified by action"""
-        return vector_add(state, self.defined_actions[action])
-
-    def value(self, state):
-        """Value of a state is the value it is the index to"""
-        x, y = state
-        assert 0 <= x < self.n
-        assert 0 <= y < self.m
-        return self.grid[x][y]
-
-
-class OnlineDFSAgent:
-    """
-    [Figure 4.21]
-    The abstract class for an OnlineDFSAgent. Override
-    update_state method to convert percept to state. While initializing
-    the subclass a problem needs to be provided which is an instance of
-    a subclass of the Problem class.
-    """
-
-    def __init__(self, problem):
-        self.problem = problem
-        self.s = None
-        self.a = None
-        self.untried = dict()
-        self.unbacktracked = dict()
-        self.result = {}
-
-    def __call__(self, percept):
-        s1 = self.update_state(percept)
-        if self.problem.goal_test(s1):
-            self.a = None
-        else:
-            if s1 not in self.untried.keys():
-                self.untried[s1] = self.problem.actions(s1)
-            if self.s is not None:
-                if s1 != self.result[(self.s, self.a)]:
-                    self.result[(self.s, self.a)] = s1
-                    self.unbacktracked[s1].insert(0, self.s)
-            if len(self.untried[s1]) == 0:
-                if len(self.unbacktracked[s1]) == 0:
-                    self.a = None
-                else:
-                    # else a <- an action b such that result[s', b] = POP(unbacktracked[s'])
-                    unbacktracked_pop = self.unbacktracked.pop(s1)
-                    for (s, b) in self.result.keys():
-                        if self.result[(s, b)] == unbacktracked_pop:
-                            self.a = b
-                            break
-            else:
-                self.a = self.untried.pop(s1)
-        self.s = s1
-        return self.a
-
-    def update_state(self, percept):
-        """To be overridden in most cases. The default case
-        assumes the percept to be of type state."""
-        return percept
-
-
-# ______________________________________________________________________________
-
-
-class OnlineSearchProblem(Problem):
-    """
-    A problem which is solved by an agent executing
-    actions, rather than by just computation.
-    Carried in a deterministic and a fully observable environment."""
-
-    def __init__(self, initial, goal, graph):
-        super().__init__(initial, goal)
-        self.graph = graph
-
-    def actions(self, state):
-        return self.graph.graph_dict[state].keys()
-
-    def output(self, state, action):
-        return self.graph.graph_dict[state][action]
-
-    def h(self, state):
-        """Returns least possible cost to reach a goal for the given state."""
-        return self.graph.least_costs[state]
-
-    def c(self, s, a, s1):
-        """Returns a cost estimate for an agent to move from state 's' to state 's1'."""
-        return 1
-
-    def update_state(self, percept):
-        raise NotImplementedError
-
-    def goal_test(self, state):
-        if state == self.goal:
-            return True
-        return False
-
-
-class LRTAStarAgent:
-    """ [Figure 4.24]
-    Abstract class for LRTA*-Agent. A problem needs to be
-    provided which is an instance of a subclass of Problem Class.
-
-    Takes a OnlineSearchProblem [Figure 4.23] as a problem.
-    """
-
-    def __init__(self, problem):
-        self.problem = problem
-        # self.result = {}      # no need as we are using problem.result
-        self.H = {}
-        self.s = None
-        self.a = None
-
-    def __call__(self, s1):  # as of now s1 is a state rather than a percept
-        if self.problem.goal_test(s1):
-            self.a = None
-            return self.a
-        else:
-            if s1 not in self.H:
-                self.H[s1] = self.problem.h(s1)
-            if self.s is not None:
-                # self.result[(self.s, self.a)] = s1    # no need as we are using problem.output
-
-                # minimum cost for action b in problem.actions(s)
-                self.H[self.s] = min(self.LRTA_cost(self.s, b, self.problem.output(self.s, b),
-                                                    self.H) for b in self.problem.actions(self.s))
-
-            # an action b in problem.actions(s1) that minimizes costs
-            self.a = min(self.problem.actions(s1),
-                         key=lambda b: self.LRTA_cost(s1, b, self.problem.output(s1, b), self.H))
-
-            self.s = s1
-            return self.a
-
-    def LRTA_cost(self, s, a, s1, H):
-        """Returns cost to move from state 's' to state 's1' plus
-        estimated cost to get to goal from s1."""
-        print(s, a, s1)
-        if s1 is None:
-            return self.problem.h(s)
-        else:
-            # sometimes we need to get H[s1] which we haven't yet added to H
-            # to replace this try, except: we can initialize H with values from problem.h
-            try:
-                return self.problem.c(s, a, s1) + self.H[s1]
-            except:
-                return self.problem.c(s, a, s1) + self.problem.h(s1)
-
-
-# ______________________________________________________________________________
-# Genetic Algorithm
-
-
-def genetic_search(problem, ngen=1000, pmut=0.1, n=20):
-    """Call genetic_algorithm on the appropriate parts of a problem.
-    This requires the problem to have states that can mate and mutate,
-    plus a value method that scores states."""
-
-    # NOTE: This is not tested and might not work.
-    # TODO: Use this function to make Problems work with genetic_algorithm.
-
-    s = problem.initial_state
-    states = [problem.result(s, a) for a in problem.actions(s)]
-    random.shuffle(states)
-    return genetic_algorithm(states[:n], problem.value, ngen, pmut)
-
-
-def genetic_algorithm(population, fitness_fn, gene_pool=[0, 1], f_thres=None, ngen=1000, pmut=0.1):
-    """[Figure 4.8]"""
-    for i in range(ngen):
-        population = [mutate(recombine(*select(2, population, fitness_fn)), gene_pool, pmut)
-                      for i in range(len(population))]
-
-        fittest_individual = fitness_threshold(fitness_fn, f_thres, population)
-        if fittest_individual:
-            return fittest_individual
-
-    return max(population, key=fitness_fn)
-
-
-def fitness_threshold(fitness_fn, f_thres, population):
-    if not f_thres:
-        return None
-
-    fittest_individual = max(population, key=fitness_fn)
-    if fitness_fn(fittest_individual) >= f_thres:
-        return fittest_individual
-
-    return None
-
-
-def init_population(pop_number, gene_pool, state_length):
-    """Initializes population for genetic algorithm
-    pop_number  :  Number of individuals in population
-    gene_pool   :  List of possible values for individuals
-    state_length:  The length of each individual"""
-    g = len(gene_pool)
-    population = []
-    for i in range(pop_number):
-        new_individual = [gene_pool[random.randrange(0, g)] for j in range(state_length)]
-        population.append(new_individual)
-
-    return population
-
-
-def select(r, population, fitness_fn):
-    fitnesses = map(fitness_fn, population)
-    sampler = weighted_sampler(population, fitnesses)
-    return [sampler() for i in range(r)]
-
-
-def recombine(x, y):
-    n = len(x)
-    c = random.randrange(0, n)
-    return x[:c] + y[c:]
-
-
-def recombine_uniform(x, y):
-    n = len(x)
-    result = [0] * n
-    indexes = random.sample(range(n), n)
-    for i in range(n):
-        ix = indexes[i]
-        result[ix] = x[ix] if i < n / 2 else y[ix]
-
-    return ''.join(str(r) for r in result)
-
-
-def mutate(x, gene_pool, pmut):
-    if random.uniform(0, 1) >= pmut:
-        return x
-
-    n = len(x)
-    g = len(gene_pool)
-    c = random.randrange(0, n)
-    r = random.randrange(0, g)
-
-    new_gene = gene_pool[r]
-    return x[:c] + [new_gene] + x[c + 1:]
-
-
-# _____________________________________________________________________________
-# The remainder of this file implements examples for the search algorithms.
 
 # ______________________________________________________________________________
 # Graphs and Graph Problems
@@ -851,61 +580,28 @@ romania_map.locations = dict(
     Sibiu=(207, 457), Timisoara=(94, 410), Urziceni=(456, 350),
     Vaslui=(509, 444), Zerind=(108, 531))
 
-""" [Figure 4.9]
-Eight possible states of the vacumm world
-Each state is represented as
-   *       "State of the left room"      "State of the right room"   "Room in which the agent
-                                                                      is present"
-1 - DDL     Dirty                         Dirty                       Left
-2 - DDR     Dirty                         Dirty                       Right
-3 - DCL     Dirty                         Clean                       Left
-4 - DCR     Dirty                         Clean                       Right
-5 - CDL     Clean                         Dirty                       Left
-6 - CDR     Clean                         Dirty                       Right
-7 - CCL     Clean                         Clean                       Left
-8 - CCR     Clean                         Clean                       Right
-"""
-vacuum_world = Graph(dict(
-    State_1=dict(Suck=['State_7', 'State_5'], Right=['State_2']),
-    State_2=dict(Suck=['State_8', 'State_4'], Left=['State_2']),
-    State_3=dict(Suck=['State_7'], Right=['State_4']),
-    State_4=dict(Suck=['State_4', 'State_2'], Left=['State_3']),
-    State_5=dict(Suck=['State_5', 'State_1'], Right=['State_6']),
-    State_6=dict(Suck=['State_8'], Left=['State_5']),
-    State_7=dict(Suck=['State_7', 'State_3'], Right=['State_8']),
-    State_8=dict(Suck=['State_8', 'State_6'], Left=['State_7'])
-))
+# puertorico_map = UndirectedGraph(dict(
+# Aguadilla=dict(Aguada=35, Moca=40, Isabela=25), Aguada=dict(), Rincon=(),
+# Moca=dict(), Anasco=dict(), Mayaguez=dict(),
+# Hormigueros =dict(), CaboRojo=dict(), Isabela=dict(),
+# SanSebastian=dict(),LasMarias=dict(), Maricao=dict(),
+# SanGerman=dict(), Lajas=dict(), SabanaGrande=dict(),
+# Guanica=dict(), Camuy=dict(), Lares=dict(),
+# Quebradillas=dict(), Yauco=dict(), Guayanilla=dict(),
+# Hatillo=dict(), Utuado=dict(), Arecibo=dict(),
+# Adjuntas=dict(), Barcelona=dict(), Jayuya=dict(),
+# Florida=dict(), VegaBaja=dict(), VegaAlta=dict(),
+# Morocovis=dict(), Ciales=dict(), Ponce=dict(),
+# Villalba=dict(), JuanaDiaz=dict(), Orocovis=dict()))
+#
+# puertorico_map.locations = dict(
+#
+# )
 
-""" [Figure 4.23]
-One-dimensional state space Graph
-"""
-one_dim_state_space = Graph(dict(
-    State_1=dict(Right='State_2'),
-    State_2=dict(Right='State_3', Left='State_1'),
-    State_3=dict(Right='State_4', Left='State_2'),
-    State_4=dict(Right='State_5', Left='State_3'),
-    State_5=dict(Right='State_6', Left='State_4'),
-    State_6=dict(Left='State_5')
-))
-one_dim_state_space.least_costs = dict(
-    State_1=8,
-    State_2=9,
-    State_3=2,
-    State_4=2,
-    State_5=4,
-    State_6=3)
 
-""" [Figure 6.1]
-Principal states and territories of Australia
-"""
-australia_map = UndirectedGraph(dict(
-    T=dict(),
-    SA=dict(WA=1, NT=1, Q=1, NSW=1, V=1),
-    NT=dict(WA=1, Q=1),
-    NSW=dict(Q=1, V=1)))
-australia_map.locations = dict(WA=(120, 24), NT=(135, 20), SA=(135, 30),
-                               Q=(145, 20), NSW=(145, 32), T=(145, 42),
-                               V=(145, 37))
+
+
+
 
 
 class GraphProblem(Problem):
@@ -963,125 +659,13 @@ class GraphProblemStochastic(GraphProblem):
         raise NotImplementedError
 
 
-# ______________________________________________________________________________
 
-
-class NQueensProblem(Problem):
-    """The problem of placing N queens on an NxN board with none attacking
-    each other. A state is represented as an N-element array, where
-    a value of r in the c-th entry means there is a queen at column c,
-    row r, and a value of -1 means that the c-th column has not been
-    filled in yet. We fill in columns left to right.
-    >>> depth_first_tree_search(NQueensProblem(8))
-    <Node (7, 3, 0, 2, 5, 1, 6, 4)>
-    """
-
-    def __init__(self, N):
-        super().__init__(tuple([-1] * N))
-        self.N = N
-
-    def actions(self, state):
-        """In the leftmost empty column, try all non-conflicting rows."""
-        if state[-1] is not -1:
-            return []  # All columns filled; no successors
-        else:
-            col = state.index(-1)
-            return [row for row in range(self.N)
-                    if not self.conflicted(state, row, col)]
-
-    def result(self, state, row):
-        """Place the next queen at the given row."""
-        col = state.index(-1)
-        new = list(state[:])
-        new[col] = row
-        return tuple(new)
-
-    def conflicted(self, state, row, col):
-        """Would placing a queen at (row, col) conflict with anything?"""
-        return any(self.conflict(row, col, state[c], c)
-                   for c in range(col))
-
-    def conflict(self, row1, col1, row2, col2):
-        """Would putting two queens in (row1, col1) and (row2, col2) conflict?"""
-        return (row1 == row2 or  # same row
-                col1 == col2 or  # same column
-                row1 - col1 == row2 - col2 or  # same \ diagonal
-                row1 + col1 == row2 + col2)  # same / diagonal
-
-    def goal_test(self, state):
-        """Check if all columns filled, no conflicts."""
-        if state[-1] is -1:
-            return False
-        return not any(self.conflicted(state, state[col], col)
-                       for col in range(len(state)))
-
-    def h(self, node):
-        """Return number of conflicting queens for a given node"""
-        num_conflicts = 0
-        for (r1, c1) in enumerate(node.state):
-            for (r2, c2) in enumerate(node.state):
-                if (r1, c1) != (r2, c2):
-                    num_conflicts += self.conflict(r1, c1, r2, c2)
-
-        return num_conflicts
-
-# Code to compare searchers on various problems.
-
-
-class InstrumentedProblem(Problem):
-    """Delegates to a problem, and keeps statistics."""
-
-    def __init__(self, problem):
-        self.problem = problem
-        self.succs = self.goal_tests = self.states = 0
-        self.found = None
-
-    def actions(self, state):
-        self.succs += 1
-        return self.problem.actions(state)
-
-    def result(self, state, action):
-        self.states += 1
-        return self.problem.result(state, action)
-
-    def goal_test(self, state):
-        self.goal_tests += 1
-        result = self.problem.goal_test(state)
-        if result:
-            self.found = state
-        return result
-
-    def path_cost(self, c, state1, action, state2):
-        return self.problem.path_cost(c, state1, action, state2)
-
-    def value(self, state):
-        return self.problem.value(state)
-
-    def __getattr__(self, attr):
-        return getattr(self.problem, attr)
-
-    def __repr__(self):
-        return '<{:4d}/{:4d}/{:4d}/{}>'.format(self.succs, self.goal_tests,
-                                               self.states, str(self.found)[:4])
-
-
-def compare_searchers(problems, header,
-                      searchers=[ astar_search, simulated_annealing_full]):
-    def do(searcher, problem):
-        p = InstrumentedProblem(problem)
-        searcher(p)
-        return p
-
-    table = [[name(s)] + [do(s, p) for p in problems] for s in searchers]
-    print_table(table, header)
 
 
 def compare_graph_searchers():
     """Prints a table of search results."""
     compare_searchers(problems=[GraphProblem('Arad', 'Bucharest', romania_map),
-                                GraphProblem('Oradea', 'Neamt', romania_map),
-                                GraphProblem('Q', 'WA', australia_map),
-                                GraphProblem('WA', 'V', australia_map)],
+                                GraphProblem('Oradea', 'Neamt', romania_map),],
                       header=['Searcher', 'romania_map(Arad, Bucharest)',
                               'romania_map(Oradea, Neamt)', 'australia_map'])
 
